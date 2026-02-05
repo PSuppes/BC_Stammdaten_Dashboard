@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+.env
+
+# Streamlit
+.streamlit/config.toml
+
+# Bilder/Temp
+Produkt_Bilder/
+temp_upload.jpg
