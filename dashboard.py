@@ -82,21 +82,23 @@ else:
                 selected_indices.append(index)
         
         with c2:
-            if sd.get('Bild Datei'): st.image(sd.get('Bild Datei'), width=80)
+            # --- CLOUD FIX: Bild-URL statt lokaler Pfad ---
+            bild_url = sd.get('Bild Datei URL')
+            if bild_url:
+                full_url = bild_url if bild_url.startswith("http") else f"https://flowzz.com{bild_url}"
+                st.image(full_url, width=80)
+            elif sd.get('Bild Datei') and os.path.exists(str(sd.get('Bild Datei'))):
+                # Fallback für lokales Testen
+                st.image(sd.get('Bild Datei'), width=80)
+            else:
+                st.caption("Kein Bild")
         
         with c3:
-            # Badge für den Status (Farbe basierend auf Status)
             st.markdown(f"<span class='status-badge {row['status']}'>{row['status']}</span>", unsafe_allow_html=True)
-            
-            # Hauptname des Produkts
             st.markdown(f"**{row['produktname']}**")
-            
-            # Hersteller und Kultivar als kleine Info
             st.caption(f"🏗️ {sd.get('Hersteller')} | 🧬 {sd.get('Kultivar')}")
             
-            # --- NEU: Hinweis bei DUPLICATE oder REVIEW ---
             if row['status'] in ['DUPLICATE', 'REVIEW'] and row.get('match_info'):
-                # Wir färben den Hinweis dezent ein, um Aufmerksamkeit zu erregen
                 color = "#ef6c00" if row['status'] == 'DUPLICATE' else "#1976d2"
                 st.markdown(f"""
                     <div style="font-size: 0.85rem; color: {color}; background-color: {color}15; padding: 5px 10px; border-radius: 5px; border: 1px solid {color}30; margin-top: 5px;">
@@ -127,13 +129,12 @@ else:
                 st.stop()
 
             p = st.progress(0)
-            status_text = st.empty() # Platzhalter für Live-Meldungen
+            status_text = st.empty()
             
             for i, idx in enumerate(selected_indices):
                 item = df_view.loc[idx]
                 sd = item['scraped_data']
                 
-                # Name-Kultivar Logik
                 clean_p_name = sd.get('Produktname', '').strip()
                 p_kultivar = sd.get('Kultivar', '').strip()
                 final_name = f"{clean_p_name} - {p_kultivar}" if p_kultivar else clean_p_name
@@ -141,15 +142,14 @@ else:
                 status_text.info(f"⏳ Übertrage ({i+1}/{len(selected_indices)}): {final_name}")
                 
                 try:
-                    # Der eigentliche Import-Aufruf
-                    # Wir prüfen hier den Rückgabewert der create_item_now Funktion
+                    # Der Connector kümmert sich um den temporären Download & das Wasserzeichen
                     success = bc.create_item_now(final_name, sd.get('Bild Datei'), sd)
                     
                     if success:
                         update_status(item['id'], 'PROCESSED')
                         st.toast(f"✅ {final_name} erfolgreich!")
                     else:
-                        st.error(f"⚠️ BC hat {final_name} abgelehnt. Prüfe das Terminal für Details.")
+                        st.error(f"⚠️ BC hat {final_name} abgelehnt.")
                 
                 except Exception as e:
                     st.error(f"🔥 Fehler bei {final_name}: {e}")
@@ -167,7 +167,4 @@ else:
             for idx in selected_indices:
                 item = df_view.loc[idx]
                 update_status(item['id'], 'IGNORED')
-            
-            st.info(f"✅ {len(selected_indices)} Produkte als IGNORED markiert.")
-            time.sleep(1)
             st.rerun()
