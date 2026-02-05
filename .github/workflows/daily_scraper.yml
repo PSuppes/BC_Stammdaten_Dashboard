@@ -1,0 +1,34 @@
+name: Nightly Scraper
+
+on:
+  schedule:
+    # Läuft jeden Tag um 02:00 Uhr UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Erlaubt manuelles Starten
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Scraper
+        env:
+          # Hier werden die Secrets aus GitHub geladen
+          BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
+          BC_CLIENT_SECRET: ${{ secrets.BC_CLIENT_SECRET }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          ENVIRONMENT: ${{ secrets.ENVIRONMENT }}
+          BC_COMPANY_ID: ${{ secrets.BC_COMPANY_ID }}
+        run: python main_script.py  # Dein Scraper-Einstiegspunkt
