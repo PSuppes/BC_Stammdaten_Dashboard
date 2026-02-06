@@ -31,4 +31,4 @@ jobs:
           TENANT_ID: ${{ secrets.TENANT_ID }}
           ENVIRONMENT: ${{ secrets.ENVIRONMENT }}
           BC_COMPANY_ID: ${{ secrets.BC_COMPANY_ID }}
-        run: python main_script.py  # Dein Scraper-Einstiegspunkt
+        run: python scraper.py  # Dein Scraper-Einstiegspunkt
