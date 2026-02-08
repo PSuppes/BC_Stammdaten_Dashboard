@@ -14,7 +14,7 @@ load_dotenv()
 # KONFIGURATION (Dynamisch aus .env)
 # ==========================================
 TENANT_ID     = os.environ.get("TENANT_ID", "675e2df2-6e8f-4868-a9d7-2d3d1d093907")
-ENVIRONMENT   = os.environ.get("ENVIRONMENT", "Sandbox_Apotheke_Stammdaten")
+ENVIRONMENT   = os.environ.get("ENVIRONMENT", "Production")
 CLIENT_ID     = os.environ.get("BC_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("BC_CLIENT_SECRET", "")
 
@@ -517,3 +517,26 @@ class BusinessCentralConnector:
                 if raw_val:
                     val_id = self._ensure_value_exists(bc_name, attr_id, raw_val)
                     if val_id: self._link_attribute_to_item(item_no, attr_id, val_id)
+
+    def get_existing_attribute_values(self, item_no):
+        """Holt alle bereits verknüpften Attribut-IDs für einen Artikel."""
+        url = f"{self.custom_api_root}/companies({self.company_id})/itemAttributeMappings?$filter=itemNo eq '{item_no}'"
+        headers = {"Authorization": f"Bearer {self.token}"}
+        try:
+            r = requests.get(url, headers=headers)
+            if r.status_code == 200:
+                return {item['attributeId'] for item in r.json().get('value', [])}
+        except Exception as e:
+            print(f"Fehler beim Laden existierender Attribute: {e}")
+        return set()
+
+    def has_image(self, item_id):
+        """Prüft, ob der Artikel bereits ein Bild hat."""
+        url = f"{self.base_url}/companies({self.company_id})/items({item_id})/picture"
+        headers = {"Authorization": f"Bearer {self.token}"}
+        r = requests.get(url, headers=headers)
+        if r.status_code == 200:
+            val = r.json().get('value', [])
+            if val and val[0].get('width', 0) > 0:
+                return True
+        return False                

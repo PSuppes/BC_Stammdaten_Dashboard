@@ -59,6 +59,63 @@ with st.sidebar:
             for i in st.session_state.visible_ids: st.session_state[f"sel_{i}"] = True
         st.rerun()
 
+    # --- NEU: MANUELLER UPDATE BEREICH ---
+    st.divider()
+    st.subheader("🔄 Manueller Artikel-Update")
+    with st.expander("Bestehende Artikel nachpflegen"):
+        target_item_no = st.text_input("BC Artikelnr", placeholder="z.B. 100.3001")
+        flowzz_url = st.text_input("Flowzz URL", placeholder="https://flowzz.com/product/...")
+        
+        if st.button("Update jetzt starten", use_container_width=True):
+            if not target_item_no or not flowzz_url:
+                st.error("Bitte Artikelnr und URL angeben!")
+            else:
+                # Import innerhalb der Funktion um Zirkelbezüge zu vermeiden
+                from scraper import get_driver, scrape_full_details, apply_pre_cleaning
+                
+                with st.spinner("🔍 Scrape Daten von Flowzz..."):
+                    driver = get_driver()
+                    try:
+                        # 1. Flowzz Daten holen
+                        scraped_data = scrape_full_details(driver, flowzz_url)
+                        scraped_data = apply_pre_cleaning(scraped_data)
+                        
+                        # 2. BC Verbindung herstellen
+                        bc = BusinessCentralConnector()
+                        bc.authenticate()
+                        
+                        # 3. Artikel in BC suchen
+                        item_data = next((i for i in bc.existing_items_cache if i['number'] == target_item_no), None)
+                        
+                        if not item_data:
+                            st.error(f"Fehler: Artikel {target_item_no} nicht in BC gefunden!")
+                        else:
+                            st.info(f"Bearbeite: {item_data['displayName']}")
+                            
+                            # 4. Fehlende Attribute ergänzen
+                            # Hinweis: Die Connector-Methode überspringt Duplikate automatisch
+                            bc._process_and_link_attributes(target_item_no, scraped_data)
+                            
+                            # 5. Bild prüfen & ggf. ohne Watermark hochladen
+                            if not bc.has_image(item_data['id']):
+                                st.warning("Kein Bild in BC gefunden. Lade hoch...")
+                                img_path = scraped_data.get('Bild Datei')
+                                if img_path and os.path.exists(img_path):
+                                    bc._upload_image(item_data['id'], img_path)
+                                    st.success("✅ Bild wurde erfolgreich nachgepflegt!")
+                                else:
+                                    st.error("❌ Kein lokaler Bild-Pfad verfügbar.")
+                            else:
+                                st.success("✅ Artikel hat bereits ein Bild.")
+
+                            st.balloons()
+                            st.success(f"Update für {target_item_no} abgeschlossen!")
+
+                    except Exception as e:
+                        st.error(f"🔥 Fehler beim manuellen Update: {e}")
+                    finally:
+                        driver.quit()
+
 # --- MAIN ---
 st.title("Flowzz Live Import")
 
@@ -142,7 +199,6 @@ else:
                 status_text.info(f"⏳ Übertrage ({i+1}/{len(selected_indices)}): {final_name}")
                 
                 try:
-                    # Der Connector kümmert sich um den temporären Download & das Wasserzeichen
                     success = bc.create_item_now(final_name, sd.get('Bild Datei'), sd)
                     
                     if success:
