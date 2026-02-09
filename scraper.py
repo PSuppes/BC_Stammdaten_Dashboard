@@ -40,8 +40,20 @@ def get_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
-    service = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=chrome_options)
+
+    # PRÜFUNG: Sind wir in der Cloud?
+    if os.path.exists("/usr/bin/chromium"):
+        # CLOUD-MODUS: 
+        # Wir nutzen die Binaries, die Streamlit via packages.txt installiert hat.
+        chrome_options.binary_location = "/usr/bin/chromium"
+        # Wir lassen Service() leer, damit Selenium den Treiber im System-Pfad sucht.
+        return webdriver.Chrome(options=chrome_options)
+    else:
+        # LOKAL-MODUS (Dein PC):
+        # Hier darf der ChromeDriverManager weiterarbeiten.
+        from webdriver_manager.chrome import ChromeDriverManager
+        service = Service(ChromeDriverManager().install())
+        return webdriver.Chrome(service=service, options=chrome_options)
 
 def clean_text(text):
     if not text: return ""
