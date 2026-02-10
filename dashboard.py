@@ -9,6 +9,31 @@ from connector import BusinessCentralConnector
 # Lade lokale .env (falls vorhanden), sonst nutzt Streamlit Secrets
 load_dotenv()
 
+# --- 1. LOGIN LOGIK ---
+def check_password():
+    """Gibt True zurück, wenn das Passwort korrekt ist."""
+    if "password_correct" not in st.session_state:
+        st.session_state.password_correct = False
+
+    if st.session_state.password_correct:
+        return True
+
+    # Login-Formular anzeigen
+    st.title("🔐 BC Stammdaten Login")
+    password = st.text_input("Bitte Passwort eingeben", type="password")
+    if st.button("Anmelden"):
+        # Das Passwort hinterlegst du in den Streamlit Cloud Secrets!
+        if password == st.secrets.get("APP_PASSWORD"):
+            st.session_state.password_correct = True
+            st.rerun()
+        else:
+            st.error("❌ Passwort falsch")
+    return False
+
+# Stoppt das Skript hier, wenn nicht eingeloggt
+if not check_password():
+    st.stop()
+
 # --- CONFIG ---
 st.set_page_config(layout="wide", page_title="Flowzz Engine", page_icon="🌿")
 
