@@ -3,7 +3,7 @@ name: Nightly Scraper
 on:
   schedule:
     # Läuft jeden Tag
-    - cron: '5 23 * * *'
+    - cron: '5 22 * * *'
   workflow_dispatch: # Erlaubt manuelles Starten
 
 jobs:
