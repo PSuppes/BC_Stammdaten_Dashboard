@@ -8,6 +8,8 @@ from datetime import datetime
 from PIL import Image, ImageDraw
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Selenium
 from selenium import webdriver
@@ -26,12 +28,26 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-START_URL = "https://flowzz.com/product?sort%5Bn%5D=createdAt&sort%5Bd%5D=-1&fav=0&pagination%5Bpage%5D=1&avail=1"
-ANZAHL_CHECK = 24
+START_URL = "https://flowzz.com/product?pagination%5Bpage%5D=124"
+ANZAHL_CHECK = 2000
 BILDER_ORDNER = "Produkt_Bilder"
 MAX_ITEMS_PRO_SPALTE = 3
 
 # --- HELPER FUNKTIONEN (ORIGINAL GITHUB LOGIK) ---
+def make_session():
+    retry = Retry(
+        total=5, 
+        backoff_factor=1.2,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=50, pool_maxsize=50)
+    s = requests.Session()
+    s.mount("https://", adapter)
+    s.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
+    return s
+
+SESSION = make_session()
 
 def get_driver():
     chrome_options = Options()
@@ -92,7 +108,7 @@ def download_image(url, product_name):
     if os.path.exists(file_path): return file_path
     try:
         if url.startswith("/"): url = f"https://flowzz.com{url}"
-        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, stream=True)
+        response = SESSION.get(url, timeout=(10, 45), stream=True)
         if response.status_code == 200:
             with open(file_path, 'wb') as f:
                 for chunk in response.iter_content(1024): f.write(chunk)
@@ -211,20 +227,30 @@ def scrape_full_details(driver, url):
     return daten
 
 def hole_links_von_uebersicht(driver):
-    print("🔎 Suche im Grid...")
+    print(f"🔎 Deep-Scan auf Seite 124 wird gestartet...")
     found = []
+    
+    # Optional: Einmal ganz nach unten scrollen, damit der Browser 
+    # wirklich alle Karten im Hintergrund "wachkitzelt"
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    time.sleep(2) 
+
+    # Wir nutzen deinen bewährten XPath
     xpath = "//div[contains(@class, 'MuiGrid2-grid-xs-6')]//div[contains(@class, 'MuiCard-root')]"
     karten = driver.find_elements(By.XPATH, xpath)
-    if not karten:
-         xpath = "//div[contains(@class, 'MuiCard-root') and .//span[text()='Neu']]"
-         karten = driver.find_elements(By.XPATH, xpath)
-    print(f"🃏 {len(karten)} Karten gefunden.")
+    
+    print(f"🃏 {len(karten)} Karten im Grid gefunden.")
+
     for karte in karten:
         try:
             link = karte.find_element(By.TAG_NAME, "a").get_attribute("href")
-            if link and link not in found: found.append(link)
-            if len(found) >= ANZAHL_CHECK: break 
-        except: continue
+            if link and link not in found: 
+                found.append(link)
+            
+        except: 
+            continue
+            
+    print(f"✅ Extraktion abgeschlossen: {len(found)} Links gesammelt.")
     return found
 
 def apply_pre_cleaning(details):
@@ -287,13 +313,25 @@ def run_nightly_scraper():
         links = hole_links_von_uebersicht(driver)
 
         for link in links:
-            print(f"\nScanning: {link}")
+            # --- DER ENTSCHEIDENDE PERFORMANCE-CHECK ---
+            # Wir prüfen anhand der URL, ob der Artikel schon in Supabase ist
+            check = supabase.table("import_queue").select("status").eq("url", link).execute()
+            
+            if check.data:
+                # Artikel ist bekannt (haben wir gerade im Quick-Import erledigt)
+                # Wir überspringen ihn sofort, um Zeit zu sparen.
+                continue 
+
+            # Ab hier landen nur noch ECHTE NEUHEITEN
+            print(f"\n✨ NEUHEIT ENTDECKT: {link}")
             details = scrape_full_details(driver, link)
-            if not details.get('Produktname') or details['Produktname'] == "Unbekannt": continue
+            
+            if not details.get('Produktname') or details['Produktname'] == "Unbekannt": 
+                continue
 
             details = apply_pre_cleaning(details)
 
-            # --- NAMENS SIMULATION (DEIN GENIALER SCHACHZUG) ---
+            # --- DEIN GENIALER NAMENS-CHECK ---
             p_name = details.get('Produktname', '').strip()
             p_kultivar = details.get('Kultivar', '').strip()
             bc_name_check = details.get('BC_DisplayName', p_name)
@@ -317,7 +355,7 @@ def run_nightly_scraper():
                 status = "REVIEW"
                 info_text = f"Ähnlich: {match_name} ({match_no}) | {int(score*100)}%"
 
-            # Sync
+            # Sync des neuen Artikels
             sync_to_supabase({
                 "Produktname": details['Produktname'],
                 "Status": status,
