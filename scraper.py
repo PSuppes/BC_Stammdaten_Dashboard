@@ -227,30 +227,25 @@ def scrape_full_details(driver, url):
     return daten
 
 def hole_links_von_uebersicht(driver):
-    print(f"🔎 Deep-Scan auf Seite 124 wird gestartet...")
-    found = []
+    print(f"🔎 JavaScript-Turbo-Scan wird gestartet...")
     
-    # Optional: Einmal ganz nach unten scrollen, damit der Browser 
-    # wirklich alle Karten im Hintergrund "wachkitzelt"
+    # Kurz nach unten scrollen, um Lazy-Loading zu triggern
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    time.sleep(2) 
-
-    # Wir nutzen deinen bewährten XPath
-    xpath = "//div[contains(@class, 'MuiGrid2-grid-xs-6')]//div[contains(@class, 'MuiCard-root')]"
-    karten = driver.find_elements(By.XPATH, xpath)
+    time.sleep(10) 
     
-    print(f"🃏 {len(karten)} Karten im Grid gefunden.")
-
-    for karte in karten:
-        try:
-            link = karte.find_element(By.TAG_NAME, "a").get_attribute("href")
-            if link and link not in found: 
-                found.append(link)
-            
-        except: 
-            continue
-            
-    print(f"✅ Extraktion abgeschlossen: {len(found)} Links gesammelt.")
+    script = """
+    return Array.from(
+        document.querySelectorAll("div.MuiGrid2-grid-xs-6 div.MuiCard-root a")
+    )
+    .map(a => a.href)
+    .filter(href => href);
+    """
+    found = driver.execute_script(script)
+    
+    # Duplikate entfernen (wichtig, falls Karten doppelt verlinkt sind)
+    found = list(dict.fromkeys(found))
+    
+    print(f"✅ {len(found)} Links in Millisekunden extrahiert.")
     return found
 
 def apply_pre_cleaning(details):
