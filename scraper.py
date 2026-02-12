@@ -141,9 +141,17 @@ def hole_listen_safe(driver, keywords):
 
 def hole_hersteller(driver):
     try:
+        # Wir suchen das Label "Im Sortiment von"
         label = driver.find_element(By.XPATH, "//*[contains(text(), 'Im Sortiment von')]")
-        return label.find_element(By.XPATH, "following::div[1]//p").text.strip()
-    except: return ""
+        
+        # 'following::p[1]' ist die Lösung: Es findet das nächste <p> Element, 
+        # egal ob es in einem <div>, einem <a> oder sonstwo verschachtelt ist.
+        hersteller_text = label.find_element(By.XPATH, "following::p[1]").text.strip()
+        
+        return hersteller_text
+    except Exception as e:
+        # Falls gar nichts gefunden wird, geben wir einen leeren String zurück
+        return ""
 
 def hole_thc_cbd(driver, typ):
     try:
