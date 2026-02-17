@@ -279,6 +279,9 @@ def sync_to_supabase(entry):
         sd = entry['ScrapedData']
         fingerprint = create_product_hash(sd.get('Hersteller'), entry['Produktname'], sd.get('THC'))
         
+        # 1. Priorität auf die übergebene URL aus dem Loop
+        target_url = entry.get("url") or sd.get('URL')
+
         # Check ob bereits verarbeitet (PROCESSED / IGNORED)
         existing = supabase.table("import_queue").select("status").eq("product_hash", fingerprint).execute()
         if existing.data:
@@ -291,9 +294,10 @@ def sync_to_supabase(entry):
             "status": entry['Status'],
             "match_info": entry['MatchInfo'],
             "scraped_data": sd,
-            "url": sd.get('URL')
+            "url": target_url
         }
-        supabase.table("import_queue").upsert(payload, on_conflict="product_hash").execute()
+        # 2. Entscheidend: on_conflict="url" statt "product_hash"
+        supabase.table("import_queue").upsert(payload, on_conflict="url").execute()
         print(f"✅ Synchronisiert: {entry['Produktname']}")
     except Exception as e:
         print(f"❌ Supabase Sync Fehler: {e}")
@@ -360,6 +364,7 @@ def run_nightly_scraper():
 
             # Sync des neuen Artikels
             sync_to_supabase({
+                "url": link,
                 "Produktname": details['Produktname'],
                 "Status": status,
                 "MatchInfo": info_text,
