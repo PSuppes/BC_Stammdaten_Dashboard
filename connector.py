@@ -568,7 +568,7 @@ class BusinessCentralConnector:
             payload = {
                 "clientId": client_id,
                 "itemNo": item_no,
-                "accepted": True
+                "accepted": False
             }
             try:
                 r = requests.post(url, headers=headers, json=payload, timeout=10)
