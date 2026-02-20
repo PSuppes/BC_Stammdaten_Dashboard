@@ -39,7 +39,10 @@ PREFIX        = "100."
 # Partner Clients für den Masterdata-Sync
 SYNC_CLIENTS = [
     "CITY_PROD", "COL_PROD", "EA_PROD", "OP_PROD1", "PROD_PELIKAN",
-    "PROD_SD", "ROLAND_PROD", "SAB_PROD", "SPITAL_PROD", "VIT_PROD"
+    "PROD_SD", "ROLAND_PROD", "SAB_PROD", "SPITAL_PROD", "VIT_PROD",
+    # --- UAT ---
+    "CITY_UAT", "COL_UAT", "COL_UAT2", "EA_UAT", "OP_UAT", 
+    "SASB_UAT", "SPIT_UAT", "UAT_PELIKAN", "VIT_UAT", "FINC_UAT"
 ]
 
 # ==========================================
@@ -558,13 +561,8 @@ class BusinessCentralConnector:
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json"
         }
-
-        sync_clients = [
-            "CITY_PROD", "COL_PROD", "EA_PROD", "OP_PROD1", "PROD_PELIKAN",
-            "PROD_SD", "ROLAND_PROD", "SAB_PROD", "SPITAL_PROD", "VIT_PROD"
-        ]
-
-        for client_id in sync_clients:
+        
+        for client_id in SYNC_CLIENTS:
             payload = {
                 "clientId": client_id,
                 "itemNo": item_no,
@@ -575,7 +573,8 @@ class BusinessCentralConnector:
                 if r.status_code in [200, 201]:
                     print(f"✅ Sync: {item_no} -> {client_id}")
                 elif "already exists" in r.text.lower():
-                    print(f"ℹ️ {client_id} war bereits aktiv.")
+                    # Das printen wir nur, wenn wir wirklich neugierig sind
+                    pass 
                 else:
                     print(f"⚠️ Fehler bei {client_id}: {r.status_code}")
             except Exception as e:

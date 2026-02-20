@@ -2,7 +2,8 @@
 __pycache__/
 *.pyc
 .env
-
+audit_sync.py
+sync_fix.py
 # Streamlit
 .streamlit/config.toml
 
