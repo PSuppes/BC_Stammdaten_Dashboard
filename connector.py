@@ -36,6 +36,12 @@ API_ENTITY    = "itemAttributeMappings" # Aus EntitySetName
 START_NUMMER  = 3000   
 PREFIX        = "100." 
 
+# Partner Clients für den Masterdata-Sync
+SYNC_CLIENTS = [
+    "CITY_PROD", "COL_PROD", "EA_PROD", "OP_PROD1", "PROD_PELIKAN",
+    "PROD_SD", "ROLAND_PROD", "SAB_PROD", "SPITAL_PROD", "VIT_PROD"
+]
+
 # ==========================================
 # HELPER & CLEANING
 # ==========================================
@@ -364,9 +370,7 @@ class BusinessCentralConnector:
     def create_item_now(self, display_name, bild_pfad, scraped_data):
         headers = { "Authorization": f"Bearer {self.token}", "Content-Type": "application/json" }
         next_no = self.find_next_number()
-        base_api_root = self.base_url.rsplit("/v2.0", 1)[0]
-        custom_url = f"{base_api_root}/{API_PUBLISHER}/{API_GROUP}/{API_VERSION}/companies({self.company_id})/items"
-
+        
         # 1. HERSTELLER LOGIK
         raw_hersteller = scraped_data.get('Hersteller', '').strip()
         m_code = None
@@ -393,7 +397,7 @@ class BusinessCentralConnector:
         # 3. PAYLOAD
         payload = {
             "number": next_no,
-            "displayName": display_name[:100], 
+            "displayName": final_display_name[:100], 
             "baseUnitOfMeasureCode": UNIT_CODE,
             "blocked": False,
             "fillingToleranceCode": FILLING_CODE,
@@ -409,21 +413,21 @@ class BusinessCentralConnector:
         if ITEM_CATEGORY: payload["itemCategoryCode"] = ITEM_CATEGORY
 
         # 4. API REQUEST
-        # Wir bauen die URL sauber von Grund auf neu
         api_base = f"https://api.businesscentral.dynamics.com/v2.0/{TENANT_ID}/{ENVIRONMENT}/api"
         custom_url = f"{api_base}/{API_PUBLISHER}/{API_GROUP}/{API_VERSION}/companies({self.company_id})/items"
 
         print(f"🚀 Sende Request an BC: {payload['displayName']}")
-        print(f"🔗 Pfad: {custom_url}") # Debug-Zeile zur Kontrolle
         
         try:
             r = requests.post(custom_url, headers=headers, json=payload, timeout=20)
             
             if r.status_code == 201:
-                item = r.json()
-                item_id = item.get('id') or item.get('systemId')
-                self.existing_items_cache.append(item) 
-                print(f"   ✅ Erstellt: {item.get('number', 'N/A')} - {item['displayName']}")
+                item_data = r.json()
+                item_id = item_data.get('id') or item_data.get('systemId')
+                item_no = item_data.get('number') # Hier wird item_no für die weiteren Schritte definiert
+                
+                self.existing_items_cache.append(item_data) 
+                print(f"   ✅ Erstellt: {item_no} - {item_data['displayName']}")
                 
                 # 5. BILD LOGIK
                 final_img_path = bild_pfad
@@ -457,8 +461,15 @@ class BusinessCentralConnector:
                     try: os.remove(temp_path)
                     except: pass
                 
-                # WICHTIG: Die Nummer für die Attribute nutzen
-                self._process_and_link_attributes(item.get('number'), scraped_data)
+                # 6. ATTRIBUTE & PARTNER SYNC
+                if item_no:
+                    # Verknüpfe Attribute
+                    self._process_and_link_attributes(item_no, scraped_data)
+                    
+                    # NEU: Partner-Sync via Finclair-Tabelle aktivieren
+                    print(f"      🔄 Aktiviere Partner-Sync für {item_no}...")
+                    self.link_to_partner_sync(item_no)
+                
                 return True
                 
             else:
@@ -540,3 +551,32 @@ class BusinessCentralConnector:
             if val and val[0].get('width', 0) > 0:
                 return True
         return False                
+
+    def link_to_partner_sync(self, item_no):
+        url = f"{self.custom_api_root}/companies({self.company_id})/itemSyncs"
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json"
+        }
+
+        sync_clients = [
+            "CITY_PROD", "COL_PROD", "EA_PROD", "OP_PROD1", "PROD_PELIKAN",
+            "PROD_SD", "ROLAND_PROD", "SAB_PROD", "SPITAL_PROD", "VIT_PROD"
+        ]
+
+        for client_id in sync_clients:
+            payload = {
+                "clientId": client_id,
+                "itemNo": item_no,
+                "accepted": True
+            }
+            try:
+                r = requests.post(url, headers=headers, json=payload, timeout=10)
+                if r.status_code in [200, 201]:
+                    print(f"✅ Sync: {item_no} -> {client_id}")
+                elif "already exists" in r.text.lower():
+                    print(f"ℹ️ {client_id} war bereits aktiv.")
+                else:
+                    print(f"⚠️ Fehler bei {client_id}: {r.status_code}")
+            except Exception as e:
+                print(f"🔥 Fehler beim Sync-Request für {client_id}: {e}")
