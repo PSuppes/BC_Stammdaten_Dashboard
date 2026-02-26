@@ -9,4 +9,5 @@ sync_fix.py
 
 # Bilder/Temp
 Produkt_Bilder/
+!Produkt_Bilder/default_flower.jpg
 temp_upload.jpg

@@ -174,6 +174,9 @@ else:
                 st.image(sd.get('Bild Datei'), width=80)
             else:
                 st.caption("Kein Bild")
+
+            # --- NEU: Checkbox für Default-Bild ---
+            st.checkbox("Standard-Bild?", key=f"default_img_{index}")    
         
         with c3:
             st.markdown(f"<span class='status-badge {row['status']}'>{row['status']}</span>", unsafe_allow_html=True)
@@ -224,7 +227,8 @@ else:
                 status_text.info(f"⏳ Übertrage ({i+1}/{len(selected_indices)}): {final_name}")
                 
                 try:
-                    success = bc.create_item_now(final_name, sd.get('Bild Datei'), sd)
+                    use_default = st.session_state.get(f"use_def_{item['id']}", False)
+                    success = bc.create_item_now(final_name, sd.get('Bild Datei'), sd, use_default_image=use_default)
                     
                     if success:
                         update_status(item['id'], 'PROCESSED')

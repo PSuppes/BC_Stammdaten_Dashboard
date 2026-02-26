@@ -370,7 +370,7 @@ class BusinessCentralConnector:
                 
         return best_name, best_score, best_no
 
-    def create_item_now(self, display_name, bild_pfad, scraped_data):
+    def create_item_now(self, display_name, bild_pfad, scraped_data, use_default_image=False):
         headers = { "Authorization": f"Bearer {self.token}", "Content-Type": "application/json" }
         next_no = self.find_next_number()
         
@@ -427,16 +427,20 @@ class BusinessCentralConnector:
             if r.status_code == 201:
                 item_data = r.json()
                 item_id = item_data.get('id') or item_data.get('systemId')
-                item_no = item_data.get('number') # Hier wird item_no für die weiteren Schritte definiert
+                item_no = item_data.get('number') 
                 
                 self.existing_items_cache.append(item_data) 
                 print(f"   ✅ Erstellt: {item_no} - {item_data['displayName']}")
                 
-                # 5. BILD LOGIK
+                # 5. BILD LOGIK (OPTIMIERT)
                 final_img_path = bild_pfad
                 temp_path = "temp_upload.jpg"
                 
-                if (not final_img_path or not os.path.exists(final_img_path)) and 'Bild Datei URL' in scraped_data:
+                # Entscheidung: Default oder Scraped?
+                if use_default_image:
+                    print("      📸 Info: Nutze Default-Bild (Manuelle Auswahl im Dashboard)")
+                    final_img_path = "Produkt_Bilder/default_flower.jpg"
+                elif (not final_img_path or not os.path.exists(final_img_path)) and 'Bild Datei URL' in scraped_data:
                     try:
                         img_url = scraped_data['Bild Datei URL']
                         if img_url:
@@ -451,7 +455,8 @@ class BusinessCentralConnector:
 
                 if final_img_path and os.path.exists(final_img_path):
                     try:
-                        if 'remove_watermark_rectangle' in globals():
+                        # Wasserzeichen nur bei echten Scrapes entfernen, nicht beim Default-Bild
+                        if not use_default_image and 'remove_watermark_rectangle' in globals():
                             remove_watermark_rectangle(final_img_path)
                         
                         if item_id:
@@ -466,12 +471,11 @@ class BusinessCentralConnector:
                 
                 # 6. ATTRIBUTE & PARTNER SYNC
                 if item_no:
-                    # Verknüpfe Attribute
                     self._process_and_link_attributes(item_no, scraped_data)
                     
-                    # NEU: Partner-Sync via Finclair-Tabelle aktivieren
-                    print(f"      🔄 Aktiviere Partner-Sync für {item_no}...")
-                    self.link_to_partner_sync(item_no)
+                    # Hier triggern wir die Finclair-Tabelle (Setup 70450)
+                    print(f"      🔄 Aktiviere Partner-Sync via FIS MM...")
+                    self.link_item_to_availability_setup(item_no) 
                 
                 return True
                 
