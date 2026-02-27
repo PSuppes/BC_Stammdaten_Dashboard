@@ -432,51 +432,56 @@ class BusinessCentralConnector:
                 self.existing_items_cache.append(item_data) 
                 print(f"   ✅ Erstellt: {item_no} - {item_data['displayName']}")
                 
-                # 5. BILD LOGIK (OPTIMIERT)
-                final_img_path = bild_pfad
-                temp_path = "temp_upload.jpg"
-                
-                # Entscheidung: Default oder Scraped?
-                if use_default_image:
-                    print("      📸 Info: Nutze Default-Bild (Manuelle Auswahl im Dashboard)")
-                    final_img_path = "Produkt_Bilder/default_flower.jpg"
-                elif (not final_img_path or not os.path.exists(final_img_path)) and 'Bild Datei URL' in scraped_data:
-                    try:
-                        img_url = scraped_data['Bild Datei URL']
-                        if img_url:
-                            full_url = img_url if img_url.startswith("http") else f"https://flowzz.com{img_url}"
-                            r_img = requests.get(full_url, stream=True, timeout=10)
-                            if r_img.status_code == 200:
-                                with open(temp_path, 'wb') as f:
-                                    for chunk in r_img.iter_content(1024): f.write(chunk)
-                                final_img_path = temp_path
-                    except Exception as img_err:
-                        print(f"   ⚠️ Bild-Download fehlgeschlagen: {img_err}")
-
-                if final_img_path and os.path.exists(final_img_path):
-                    try:
-                        # Wasserzeichen nur bei echten Scrapes entfernen, nicht beim Default-Bild
-                        if not use_default_image and 'remove_watermark_rectangle' in globals():
-                            remove_watermark_rectangle(final_img_path)
-                        
-                        if item_id:
-                            time.sleep(1) 
-                            self._upload_image(item_id, final_img_path)
-                    except Exception as upload_err:
-                        print(f"   ⚠️ Bild-Upload Fehler: {upload_err}")
-                
-                if final_img_path == temp_path and os.path.exists(temp_path):
-                    try: os.remove(temp_path)
-                    except: pass
-                
-                # 6. ATTRIBUTE & PARTNER SYNC
-                if item_no:
-                    self._process_and_link_attributes(item_no, scraped_data)
+                try:
+                    # 5. BILD LOGIK (OPTIMIERT)
+                    final_img_path = bild_pfad
+                    temp_path = "temp_upload.jpg"
                     
-                    # Hier triggern wir die Finclair-Tabelle (Setup 70450)
-                    print(f"      🔄 Aktiviere Partner-Sync via FIS MM...")
-                    self.link_item_to_availability_setup(item_no) 
-                
+                    if use_default_image:
+                        print("      📸 Info: Nutze Default-Bild (Manuelle Auswahl im Dashboard)")
+                        final_img_path = "Produkt_Bilder/default_flower.jpg"
+                    elif (not final_img_path or not os.path.exists(final_img_path)) and 'Bild Datei URL' in scraped_data:
+                        try:
+                            img_url = scraped_data['Bild Datei URL']
+                            if img_url:
+                                full_url = img_url if img_url.startswith("http") else f"https://flowzz.com{img_url}"
+                                r_img = requests.get(full_url, stream=True, timeout=10)
+                                if r_img.status_code == 200:
+                                    with open(temp_path, 'wb') as f:
+                                        for chunk in r_img.iter_content(1024): f.write(chunk)
+                                    final_img_path = temp_path
+                        except Exception as img_err:
+                            print(f"   ⚠️ Bild-Download fehlgeschlagen: {img_err}")
+
+                    if final_img_path and os.path.exists(final_img_path):
+                        try:
+                            # Wasserzeichen nur bei echten Scrapes entfernen
+                            if not use_default_image and 'remove_watermark_rectangle' in globals():
+                                remove_watermark_rectangle(final_img_path)
+                            
+                            if item_id:
+                                time.sleep(1) 
+                                self._upload_image(item_id, final_img_path)
+                        except Exception as upload_err:
+                            print(f"   ⚠️ Bild-Upload Fehler: {upload_err}")
+                    
+                    if final_img_path == temp_path and os.path.exists(temp_path):
+                        try: os.remove(temp_path)
+                        except: pass
+                    
+                    # 6. ATTRIBUTE & PARTNER SYNC
+                    if item_no:
+                        try:
+                            self._process_and_link_attributes(item_no, scraped_data)
+                            print(f"      🔄 Aktiviere Partner-Sync via FIS MM...")
+                            self.link_item_to_availability_setup(item_no) 
+                        except Exception as sync_err:
+                            print(f"   ⚠️ Attribut/Partner-Sync Fehler (Artikel ok): {sync_err}")
+
+                except Exception as sub_err:
+                    print(f"   ⚠️ Allgemeine Nachbearbeitung fehlgeschlagen: {sub_err}")
+
+                # DEFINITIVES ERFOLGSSIGNAL AN DASHBOARD
                 return True
                 
             else:
