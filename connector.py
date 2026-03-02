@@ -59,15 +59,32 @@ def clean_string_global(text):
 def remove_watermark_rectangle(file_path):
     try:
         with Image.open(file_path) as img:
-            img = img.convert("RGB")
+            # 1. Transparenz-Check & Korrektur
+            if img.mode in ("RGBA", "P") or "transparency" in img.info:
+                img = img.convert("RGBA")
+                # Weißes "Blatt" unter die Blüte legen
+                background = Image.new("RGBA", img.size, (255, 255, 255, 255))
+                combined = Image.alpha_composite(background, img)
+                img = combined.convert("RGB")
+            else:
+                # Normales Bild: Wie bisher direkt konvertieren
+                img = img.convert("RGB")
+
+            # 2. Wasserzeichen übermalen (Deine Logik)
             width, height = img.size
             draw = ImageDraw.Draw(img)
+            
             # Koordinaten für das Rechteck unten rechts (Flowzz Logo)
             rect_width = 380
             rect_height = 160
             coords = [width - rect_width, height - rect_height, width, height]
+            
             draw.rectangle(coords, fill=(255, 255, 255), outline=None)
+            
+            # 3. Speichern
             img.save(file_path, quality=95)
+            print(f"      ✅ Bild-Hintergrund & Wasserzeichen optimiert: {file_path}")
+            
     except Exception as e:
         print(f"      ⚠️ Warnung: Konnte Wasserzeichen nicht entfernen: {e}")
 

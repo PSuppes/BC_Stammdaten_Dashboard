@@ -89,13 +89,32 @@ def clean_number_int(text):
 def remove_watermark_rectangle(file_path):
     try:
         with Image.open(file_path) as img:
-            img = img.convert("RGB")
+            # PRÜFUNG: Hat das Bild Transparenz?
+            if img.mode in ("RGBA", "P") or "transparency" in img.info:
+                # 1. In RGBA konvertieren (um den Alpha-Kanal sicher zu haben)
+                img = img.convert("RGBA")
+                # 2. Weißes Hintergrundbild erstellen
+                background = Image.new("RGBA", img.size, (255, 255, 255, 255))
+                # 3. Transparentes Bild auf den weißen Hintergrund legen
+                combined = Image.alpha_composite(background, img)
+                # 4. Für den weiteren Prozess in RGB umwandeln
+                img = combined.convert("RGB")
+            else:
+                # Normales Bild: Wie bisher direkt konvertieren
+                img = img.convert("RGB")
+
+            # AB HIER: Dein weißer Balken (unverändert)
             width, height = img.size
             draw = ImageDraw.Draw(img)
+            # Deine exakten Maße:
             coords = [width - 380, height - 160, width, height]
             draw.rectangle(coords, fill=(255, 255, 255), outline=None)
+            
+            # Speichern
             img.save(file_path, quality=95)
-    except: pass
+            print(f"✅ Transparenz korrigiert & Balken gesetzt: {file_path}")
+    except Exception as e:
+        print(f"⚠️ Fehler bei Bildbearbeitung: {e}")
 
 def sanitize_filename(name):
     return re.sub(r'[\\/*?:"<>|]', "", name).strip()
