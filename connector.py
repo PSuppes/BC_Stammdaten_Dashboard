@@ -141,7 +141,7 @@ MANUFACTURER_CODE_MAPPING = {
     "Solidmind Group GmbH": "SOLIDMIND", "SOMAÍ Pharmaceuticals": "SOMAI", "Swiss Alpino Pharma": "SWISSALPIN",
     "Therismos": "THERISMOS", "Tikun Olam Europe": "TIKUNOLAM", "Tilray": "TILRAY",
     "Top Shelf Medical": "TOPSHELF", "Vayamed": "VAYAMED", "Vertanical": "VERTANICAL",
-    "Weeco": "WEECO", "WMG Pharma": "WMG"
+    "Weeco": "WEECO", "WMG Pharma": "WMG", "ROOBS GmbH": "ROOBS",
 }
 
 CREATE_NEW_VALUES = True 
