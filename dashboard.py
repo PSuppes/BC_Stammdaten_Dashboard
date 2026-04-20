@@ -154,6 +154,7 @@ else:
 
     for index, row in df_view.iterrows():
         sd = row['scraped_data']
+        item_id = row['id']
         st.markdown(f'<div class="card">', unsafe_allow_html=True)
         c1, c2, c3, c4 = st.columns([0.4, 1.2, 4, 2])
         
@@ -176,7 +177,7 @@ else:
                 st.caption("Kein Bild")
 
             # --- NEU: Checkbox für Default-Bild ---
-            st.checkbox("Standard-Bild?", key=f"default_img_{index}")    
+            st.checkbox("Standard-Bild?", key=f"default_img_{item_id}")    
         
         with c3:
             st.markdown(f"<span class='status-badge {row['status']}'>{row['status']}</span>", unsafe_allow_html=True)
@@ -227,7 +228,7 @@ else:
                 status_text.info(f"⏳ Übertrage ({i+1}/{len(selected_indices)}): {final_name}")
                 
                 try:
-                    use_default = st.session_state.get(f"use_def_{item['id']}", False)
+                    use_default = st.session_state.get(f"default_img_{item['id']}", False)
                     success = bc.create_item_now(final_name, sd.get('Bild Datei'), sd, use_default_image=use_default)
                     
                     if success:

@@ -4,6 +4,7 @@ __pycache__/
 .env
 audit_sync.py
 sync_fix.py
+urlsupabase.py
 # Streamlit
 .streamlit/config.toml
 
