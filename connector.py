@@ -263,20 +263,28 @@ class BusinessCentralConnector:
         search_key_strict = clean_val.lower().strip()
 
         if attr_name == "Hersteller":
-            ignore_words = ["gmbh", "ag", "limited", "ltd", "pharma", "pharm", "medical", "cannabis", "deutschland", "germany", "europe", "healthcare", "therapeutics", "labs"]
+            for existing_name, existing_id in cached_values.items():
+                if existing_name.lower().strip() == search_key_strict:
+                    return existing_id
+
+            ignore_words = [
+                "gmbh", "ag", "limited", "ltd", "deutschland", "germany",
+                "europe", "healthcare", "therapeutics", "labs", "pharma",
+                "pharm", "medical", "cannabis"
+            ]
+
             def normalize_brand(name):
                 n = name.lower()
-                for word in ignore_words: n = n.replace(word, "")
+                for word in ignore_words:
+                    n = n.replace(word, "")
                 return re.sub(r'[^a-z0-9]', '', n)
 
             input_core = normalize_brand(clean_val)
-            for existing_name, existing_id in cached_values.items():
-                bc_core = normalize_brand(existing_name)
-                is_match = False
-                if input_core == bc_core: is_match = True
-                elif len(input_core) > 2 and len(bc_core) > 2:
-                     if input_core in bc_core or bc_core in input_core: is_match = True
-                if is_match: return existing_id
+            if input_core:
+                for existing_name, existing_id in cached_values.items():
+                    bc_core = normalize_brand(existing_name)
+                    if input_core == bc_core:
+                        return existing_id
         else:
             for existing_name, existing_id in cached_values.items():
                 if existing_name.lower().strip() == search_key_strict:
