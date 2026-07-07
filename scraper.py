@@ -57,6 +57,7 @@ def build_chrome_options(headless_mode="new", browser_path=None, user_data_dir=N
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-software-rasterizer")
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--remote-debugging-port=0")
@@ -68,7 +69,6 @@ def build_chrome_options(headless_mode="new", browser_path=None, user_data_dir=N
     if is_cloud:
         chrome_options.add_argument("--no-zygote")
         chrome_options.add_argument("--disable-setuid-sandbox")
-        chrome_options.add_argument("--single-process")
     return chrome_options
 
 def cleanup_driver(driver):
@@ -90,14 +90,23 @@ def get_driver():
         print(f"Chrome gestartet über: {label}")
         return driver
 
-    CLOUD_BROWSER_PATHS = ["/usr/bin/chromium", "/usr/bin/chromium-browser"]
-    CLOUD_DRIVER_PATHS = ["/usr/bin/chromedriver", "/usr/lib/chromium/chromedriver"]
+    CLOUD_BROWSER_PATHS = [
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser"
+    ]
+    CLOUD_DRIVER_PATHS = [
+        "/usr/bin/chromedriver",
+        "/usr/lib/chromium/chromedriver"
+    ]
 
     browser_path = next((p for p in CLOUD_BROWSER_PATHS if os.path.exists(p)), None)
     driver_path = next((p for p in CLOUD_DRIVER_PATHS if os.path.exists(p)), None)
 
     attempts = []
-    for headless_mode in ("new", "legacy"):
+    headless_modes = ("legacy", "new") if browser_path else ("new", "legacy")
+    for headless_mode in headless_modes:
         if browser_path and driver_path:
             attempts.append({
                 "label": f"system-chromium ({headless_mode})",
@@ -122,13 +131,20 @@ def get_driver():
             user_data_dir=temp_profile_dir,
             is_cloud=attempt["is_cloud"]
         )
+        driver = None
         try:
             if attempt["service"] is not None:
                 driver = webdriver.Chrome(service=attempt["service"], options=chrome_options)
             else:
                 driver = webdriver.Chrome(options=chrome_options)
+            driver.get("about:blank")
+            driver.execute_script("return document.readyState")
             return register_driver(driver, temp_profile_dir, attempt["label"])
         except Exception as e:
+            try:
+                driver.quit()
+            except Exception:
+                pass
             driver_errors.append(f"{attempt['label']}: {type(e).__name__}: {e}")
             shutil.rmtree(temp_profile_dir, ignore_errors=True)
 
@@ -138,11 +154,18 @@ def get_driver():
             headless_mode=headless_mode,
             user_data_dir=temp_profile_dir
         )
+        driver = None
         try:
             service = Service(ChromeDriverManager().install())
             driver = webdriver.Chrome(service=service, options=chrome_options)
+            driver.get("about:blank")
+            driver.execute_script("return document.readyState")
             return register_driver(driver, temp_profile_dir, f"webdriver-manager ({headless_mode})")
         except Exception as e:
+            try:
+                driver.quit()
+            except Exception:
+                pass
             driver_errors.append(f"webdriver-manager ({headless_mode}): {type(e).__name__}: {e}")
             shutil.rmtree(temp_profile_dir, ignore_errors=True)
 
