@@ -301,12 +301,6 @@ def sync_to_supabase(entry):
         # 1. Priorität auf die übergebene URL aus dem Loop
         target_url = entry.get("url") or sd.get('URL')
 
-        # Check ob bereits verarbeitet (PROCESSED / IGNORED)
-        existing = supabase.table("import_queue").select("status").eq("product_hash", fingerprint).execute()
-        if existing.data:
-            if existing.data[0]['status'] in ['PROCESSED', 'IGNORED']:
-                return # Keine Änderung bei fertigen Produkten
-
         payload = {
             "product_hash": fingerprint,
             "produktname": entry['Produktname'],
