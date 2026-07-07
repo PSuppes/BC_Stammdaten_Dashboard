@@ -56,7 +56,10 @@ def get_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--no-zygote")
+    chrome_options.add_argument("--disable-setuid-sandbox")
     chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--user-data-dir=/tmp/chrome-data")
 
     CLOUD_BROWSER_PATHS = ["/usr/bin/chromium", "/usr/bin/chromium-browser"]
     CLOUD_DRIVER_PATHS = ["/usr/bin/chromedriver", "/usr/lib/chromium/chromedriver"]
@@ -65,9 +68,6 @@ def get_driver():
     driver_path = next((p for p in CLOUD_DRIVER_PATHS if os.path.exists(p)), None)
 
     if browser_path and driver_path:
-        chrome_options.add_argument("--no-zygote")
-        chrome_options.add_argument("--disable-setuid-sandbox")
-        chrome_options.add_argument("--user-data-dir=/tmp/chrome-data")
         chrome_options.binary_location = browser_path
         service = Service(driver_path)
         return webdriver.Chrome(service=service, options=chrome_options)
