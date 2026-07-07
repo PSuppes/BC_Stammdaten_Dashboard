@@ -4,6 +4,8 @@ import requests
 import re
 import hashlib
 import json
+import shutil
+import tempfile
 from datetime import datetime
 from PIL import Image, ImageDraw
 from dotenv import load_dotenv
@@ -49,14 +51,44 @@ def make_session():
 
 SESSION = make_session()
 
-def get_driver():
+def build_chrome_options(headless_mode="new", browser_path=None, user_data_dir=None, is_cloud=False):
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--headless=new" if headless_mode == "new" else "--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--remote-debugging-port=0")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    if user_data_dir:
+        chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+    if browser_path:
+        chrome_options.binary_location = browser_path
+    if is_cloud:
+        chrome_options.add_argument("--no-zygote")
+        chrome_options.add_argument("--disable-setuid-sandbox")
+        chrome_options.add_argument("--single-process")
+    return chrome_options
+
+def cleanup_driver(driver):
+    temp_profile_dir = getattr(driver, "_temp_profile_dir", None)
+    try:
+        driver.quit()
+    except Exception:
+        pass
+
+    if temp_profile_dir and os.path.isdir(temp_profile_dir):
+        shutil.rmtree(temp_profile_dir, ignore_errors=True)
+
+def get_driver():
+    driver_errors = []
+    temp_root = "/tmp" if os.path.isdir("/tmp") else tempfile.gettempdir()
+
+    def register_driver(driver, temp_profile_dir, label):
+        driver._temp_profile_dir = temp_profile_dir
+        print(f"Chrome gestartet über: {label}")
+        return driver
 
     CLOUD_BROWSER_PATHS = ["/usr/bin/chromium", "/usr/bin/chromium-browser"]
     CLOUD_DRIVER_PATHS = ["/usr/bin/chromedriver", "/usr/lib/chromium/chromedriver"]
@@ -64,17 +96,57 @@ def get_driver():
     browser_path = next((p for p in CLOUD_BROWSER_PATHS if os.path.exists(p)), None)
     driver_path = next((p for p in CLOUD_DRIVER_PATHS if os.path.exists(p)), None)
 
-    if browser_path and driver_path:
-        chrome_options.add_argument("--no-zygote")
-        chrome_options.add_argument("--disable-setuid-sandbox")
-        chrome_options.add_argument("--user-data-dir=/tmp/chrome-data")
-        chrome_options.binary_location = browser_path
-        service = Service(driver_path)
-        return webdriver.Chrome(service=service, options=chrome_options)
-    else:
-        from webdriver_manager.chrome import ChromeDriverManager
-        service = Service(ChromeDriverManager().install())
-        return webdriver.Chrome(service=service, options=chrome_options)
+    attempts = []
+    for headless_mode in ("new", "legacy"):
+        if browser_path and driver_path:
+            attempts.append({
+                "label": f"system-chromium ({headless_mode})",
+                "headless_mode": headless_mode,
+                "browser_path": browser_path,
+                "service": Service(driver_path),
+                "is_cloud": True
+            })
+        attempts.append({
+            "label": f"selenium-manager ({headless_mode})",
+            "headless_mode": headless_mode,
+            "browser_path": browser_path,
+            "service": None,
+            "is_cloud": bool(browser_path)
+        })
+
+    for attempt in attempts:
+        temp_profile_dir = tempfile.mkdtemp(prefix="flowzz-chrome-", dir=temp_root)
+        chrome_options = build_chrome_options(
+            headless_mode=attempt["headless_mode"],
+            browser_path=attempt["browser_path"],
+            user_data_dir=temp_profile_dir,
+            is_cloud=attempt["is_cloud"]
+        )
+        try:
+            if attempt["service"] is not None:
+                driver = webdriver.Chrome(service=attempt["service"], options=chrome_options)
+            else:
+                driver = webdriver.Chrome(options=chrome_options)
+            return register_driver(driver, temp_profile_dir, attempt["label"])
+        except Exception as e:
+            driver_errors.append(f"{attempt['label']}: {type(e).__name__}: {e}")
+            shutil.rmtree(temp_profile_dir, ignore_errors=True)
+
+    for headless_mode in ("new", "legacy"):
+        temp_profile_dir = tempfile.mkdtemp(prefix="flowzz-chrome-", dir=temp_root)
+        chrome_options = build_chrome_options(
+            headless_mode=headless_mode,
+            user_data_dir=temp_profile_dir
+        )
+        try:
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            return register_driver(driver, temp_profile_dir, f"webdriver-manager ({headless_mode})")
+        except Exception as e:
+            driver_errors.append(f"webdriver-manager ({headless_mode}): {type(e).__name__}: {e}")
+            shutil.rmtree(temp_profile_dir, ignore_errors=True)
+
+    raise RuntimeError("Chrome konnte nicht gestartet werden: " + " | ".join(driver_errors))
 
 def clean_text(text):
     if not text: return ""
@@ -298,6 +370,18 @@ def create_product_hash(hersteller, produktname, thc):
     clean_identity = re.sub(r'[\W_]+', '', identity)
     return hashlib.md5(clean_identity.encode()).hexdigest()
 
+def is_known_url(url, retries=3):
+    last_error = None
+    for attempt in range(1, retries + 1):
+        try:
+            response = supabase.table("import_queue").select("status").eq("url", url).execute()
+            return bool(response.data)
+        except Exception as e:
+            last_error = e
+            print(f"Supabase-Check fehlgeschlagen ({attempt}/{retries}) für {url}: {e}")
+            time.sleep(min(attempt, 3))
+    raise RuntimeError(f"Supabase-Check dauerhaft fehlgeschlagen für {url}: {last_error}")
+
 def sync_to_supabase(entry):
     try:
         sd = entry['ScrapedData']
@@ -319,6 +403,35 @@ def sync_to_supabase(entry):
         print(f"✅ Synchronisiert: {entry['Produktname']}")
     except Exception as e:
         print(f"❌ Supabase Sync Fehler: {e}")
+
+# Robuste Version mit Retry-Logik. Ueberschreibt die fruehere Definition.
+def sync_to_supabase(entry, retries=3):
+    sd = entry['ScrapedData']
+    fingerprint = create_product_hash(sd.get('Hersteller'), entry['Produktname'], sd.get('THC'))
+
+    target_url = entry.get("url") or sd.get('URL')
+    payload = {
+        "product_hash": fingerprint,
+        "produktname": entry['Produktname'],
+        "status": entry['Status'],
+        "match_info": entry['MatchInfo'],
+        "scraped_data": sd,
+        "url": target_url
+    }
+
+    last_error = None
+    for attempt in range(1, retries + 1):
+        try:
+            supabase.table("import_queue").upsert(payload, on_conflict="url").execute()
+            print(f"Synchronisiert: {entry['Produktname']}")
+            return True
+        except Exception as e:
+            last_error = e
+            print(f"Supabase Sync Fehler ({attempt}/{retries}) fuer {entry['Produktname']}: {e}")
+            time.sleep(min(attempt * 2, 5))
+
+    print(f"Synchronisierung dauerhaft fehlgeschlagen: {entry['Produktname']} | {last_error}")
+    return False
 
 # --- MAIN RUNNER ---
 
@@ -394,6 +507,76 @@ def run_nightly_scraper():
     finally:
         driver.quit()
         print("😴 Scraper beendet.")
+
+def run_nightly_scraper():
+    print("START: Flowzz Nightly Scraper -> SUPABASE CLOUD")
+    try:
+        bc = BusinessCentralConnector()
+        bc.authenticate()
+    except Exception as e:
+        print(f"ABBRUCH: BC nicht erreichbar: {e}")
+        return
+
+    driver = get_driver()
+    try:
+        print(f"Oeffne URL: {START_URL}")
+        driver.get(START_URL)
+        time.sleep(5)
+        links = hole_links_von_uebersicht(driver)
+
+        for link in links:
+            try:
+                if is_known_url(link):
+                    continue
+
+                print(f"\nNEUHEIT ENTDECKT: {link}")
+                details = scrape_full_details(driver, link)
+
+                if not details.get('Produktname') or details['Produktname'] == "Unbekannt":
+                    print(f"Produkt konnte nicht sauber gelesen werden: {link}")
+                    continue
+
+                details = apply_pre_cleaning(details)
+
+                p_name = details.get('Produktname', '').strip()
+                p_kultivar = details.get('Kultivar', '').strip()
+                bc_name_check = details.get('BC_DisplayName', p_name)
+
+                if p_name and p_kultivar:
+                    clean_p_name = p_name
+                    if p_name.endswith(p_kultivar):
+                        if not p_name.endswith(f"- {p_kultivar}") and not p_name.endswith(f"-{p_kultivar}"):
+                            clean_p_name = p_name[:-len(p_kultivar)].strip()
+                    bc_name_check = f"{clean_p_name} - {p_kultivar}"
+
+                print(f"Pruefung fuer: '{bc_name_check}'")
+                match_name, score, match_no = bc.get_match_info(bc_name_check)
+
+                status = "READY"
+                info_text = "Neu"
+                if score > 0.98:
+                    status = "DUPLICATE"
+                    info_text = f"Gefunden: {match_name} ({match_no})"
+                elif score > 0.85:
+                    status = "REVIEW"
+                    info_text = f"Aehnlich: {match_name} ({match_no}) | {int(score * 100)}%"
+
+                sync_to_supabase({
+                    "url": link,
+                    "Produktname": details['Produktname'],
+                    "Status": status,
+                    "MatchInfo": info_text,
+                    "ScrapedData": details
+                })
+            except Exception as item_error:
+                print(f"Fehler bei Artikel {link}: {type(item_error).__name__}: {item_error}")
+                continue
+
+    except Exception as e:
+        print(f"Fehler im Haupt-Loop: {e}")
+    finally:
+        cleanup_driver(driver)
+        print("Scraper beendet.")
 
 if __name__ == "__main__":
     run_nightly_scraper()
