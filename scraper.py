@@ -51,15 +51,13 @@ SESSION = make_session()
 
 def get_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--no-zygote")
     chrome_options.add_argument("--disable-setuid-sandbox")
-    chrome_options.add_argument("--single-process")
-    chrome_options.add_argument("--disable-extensions")
 
     CLOUD_BROWSER_PATHS = ["/usr/bin/chromium", "/usr/bin/chromium-browser"]
     CLOUD_DRIVER_PATHS = ["/usr/bin/chromedriver", "/usr/lib/chromium/chromedriver"]
