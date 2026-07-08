@@ -53,12 +53,15 @@ SESSION = make_session()
 
 def get_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--disable-software-rasterizer")
     chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--no-first-run")
+    chrome_options.add_argument("--disable-crash-reporter")
 
     is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
     is_streamlit_cloud = os.name == "posix" and not is_github_actions
@@ -68,6 +71,7 @@ def get_driver():
         tmp_dir = tempfile.mkdtemp(prefix="chrome-", dir="/tmp")
         chrome_options.add_argument("--no-zygote")
         chrome_options.add_argument("--disable-setuid-sandbox")
+        chrome_options.add_argument("--ozone-platform=headless")
         chrome_options.add_argument(f"--user-data-dir={tmp_dir}")
 
     browser_path = (
