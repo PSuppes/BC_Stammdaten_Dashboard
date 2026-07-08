@@ -1,7 +1,5 @@
 import time
 import os
-import tempfile
-import shutil
 import requests
 import re
 import hashlib
@@ -52,31 +50,26 @@ def make_session():
 SESSION = make_session()
 
 def get_driver():
-    is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
-    is_streamlit_cloud = os.name == "posix" and not is_github_actions
-
     chrome_options = Options()
+    chrome_options.add_argument("--headless=new") 
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
 
-    if is_streamlit_cloud:
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-zygote")
-        chrome_options.add_argument("--disable-setuid-sandbox")
-        tmp_dir = tempfile.mkdtemp(prefix="chrome-", dir="/tmp")
-        chrome_options.add_argument(f"--user-data-dir={tmp_dir}")
+    # PRÜFUNG: Sind wir in der Cloud?
+    if os.path.exists("/usr/bin/chromium"):
+        # CLOUD-MODUS: 
+        # Wir nutzen die Binaries, die Streamlit via packages.txt installiert hat.
         chrome_options.binary_location = "/usr/bin/chromium"
-        try:
-            return webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=chrome_options)
-        except Exception:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            raise
+        # Wir lassen Service() leer, damit Selenium den Treiber im System-Pfad sucht.
+        return webdriver.Chrome(options=chrome_options)
     else:
-        chrome_options.add_argument("--headless=new")
+        # LOKAL-MODUS (Dein PC):
+        # Hier darf der ChromeDriverManager weiterarbeiten.
         from webdriver_manager.chrome import ChromeDriverManager
-        return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        service = Service(ChromeDriverManager().install())
+        return webdriver.Chrome(service=service, options=chrome_options)
 
 def clean_text(text):
     if not text: return ""
