@@ -57,16 +57,21 @@ def get_driver():
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
 
-    # PRÜFUNG: Sind wir in der Cloud?
-    if os.path.exists("/usr/bin/chromium"):
-        # CLOUD-MODUS: 
-        # Wir nutzen die Binaries, die Streamlit via packages.txt installiert hat.
-        chrome_options.binary_location = "/usr/bin/chromium"
-        # Wir lassen Service() leer, damit Selenium den Treiber im System-Pfad sucht.
-        return webdriver.Chrome(options=chrome_options)
+    CLOUD_BROWSER_PATHS = ["/usr/bin/chromium", "/usr/bin/chromium-browser"]
+    CLOUD_DRIVER_PATHS = ["/usr/bin/chromedriver", "/usr/lib/chromium/chromedriver"]
+
+    browser_path = next((p for p in CLOUD_BROWSER_PATHS if os.path.exists(p)), None)
+    driver_path = next((p for p in CLOUD_DRIVER_PATHS if os.path.exists(p)), None)
+
+    if browser_path and driver_path:
+        # Streamlit Cloud (Debian Trixie): explizite Pfade + Container-Flags nötig
+        chrome_options.add_argument("--no-zygote")
+        chrome_options.add_argument("--disable-setuid-sandbox")
+        chrome_options.add_argument("--user-data-dir=/tmp/chrome-data")
+        chrome_options.binary_location = browser_path
+        service = Service(driver_path)
+        return webdriver.Chrome(service=service, options=chrome_options)
     else:
-        # LOKAL-MODUS (Dein PC):
-        # Hier darf der ChromeDriverManager weiterarbeiten.
         from webdriver_manager.chrome import ChromeDriverManager
         service = Service(ChromeDriverManager().install())
         return webdriver.Chrome(service=service, options=chrome_options)
