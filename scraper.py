@@ -1,5 +1,7 @@
 import time
 import os
+import tempfile
+import shutil
 import requests
 import re
 import hashlib
@@ -51,10 +53,11 @@ SESSION = make_session()
 
 def get_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new") 
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-software-rasterizer")
     chrome_options.add_argument("--window-size=1920,1080")
 
     CLOUD_BROWSER_PATHS = ["/usr/bin/chromium", "/usr/bin/chromium-browser"]
@@ -64,13 +67,17 @@ def get_driver():
     driver_path = next((p for p in CLOUD_DRIVER_PATHS if os.path.exists(p)), None)
 
     if browser_path and driver_path:
-        # Streamlit Cloud (Debian Trixie): explizite Pfade + Container-Flags nötig
+        tmp_dir = tempfile.mkdtemp(prefix="chrome-", dir="/tmp")
         chrome_options.add_argument("--no-zygote")
         chrome_options.add_argument("--disable-setuid-sandbox")
-        chrome_options.add_argument("--user-data-dir=/tmp/chrome-data")
+        chrome_options.add_argument(f"--user-data-dir={tmp_dir}")
         chrome_options.binary_location = browser_path
         service = Service(driver_path)
-        return webdriver.Chrome(service=service, options=chrome_options)
+        try:
+            return webdriver.Chrome(service=service, options=chrome_options)
+        except Exception:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            raise
     else:
         from webdriver_manager.chrome import ChromeDriverManager
         service = Service(ChromeDriverManager().install())
