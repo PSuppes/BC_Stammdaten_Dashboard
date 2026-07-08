@@ -60,28 +60,36 @@ def get_driver():
     chrome_options.add_argument("--disable-software-rasterizer")
     chrome_options.add_argument("--window-size=1920,1080")
 
-    CLOUD_BROWSER_PATHS = ["/usr/bin/chromium", "/usr/bin/chromium-browser"]
-    CLOUD_DRIVER_PATHS = ["/usr/bin/chromedriver", "/usr/lib/chromium/chromedriver"]
+    is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
+    is_streamlit_cloud = os.name == "posix" and not is_github_actions
 
-    browser_path = next((p for p in CLOUD_BROWSER_PATHS if os.path.exists(p)), None)
-    driver_path = next((p for p in CLOUD_DRIVER_PATHS if os.path.exists(p)), None)
-
-    if browser_path and driver_path:
+    tmp_dir = None
+    if is_streamlit_cloud:
         tmp_dir = tempfile.mkdtemp(prefix="chrome-", dir="/tmp")
         chrome_options.add_argument("--no-zygote")
         chrome_options.add_argument("--disable-setuid-sandbox")
         chrome_options.add_argument(f"--user-data-dir={tmp_dir}")
-        chrome_options.binary_location = browser_path
-        service = Service(driver_path)
-        try:
-            return webdriver.Chrome(service=service, options=chrome_options)
-        except Exception:
+
+    browser_path = (
+        next((p for p in ["/usr/bin/chromium", "/usr/bin/chromium-browser"] if os.path.exists(p)), None)
+        or shutil.which("chromium") or shutil.which("chromium-browser")
+    )
+    driver_path = (
+        next((p for p in ["/usr/bin/chromedriver", "/usr/lib/chromium/chromedriver"] if os.path.exists(p)), None)
+        or shutil.which("chromedriver")
+    )
+
+    try:
+        if browser_path and driver_path:
+            chrome_options.binary_location = browser_path
+            return webdriver.Chrome(service=Service(driver_path), options=chrome_options)
+        else:
+            from webdriver_manager.chrome import ChromeDriverManager
+            return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    except Exception:
+        if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-            raise
-    else:
-        from webdriver_manager.chrome import ChromeDriverManager
-        service = Service(ChromeDriverManager().install())
-        return webdriver.Chrome(service=service, options=chrome_options)
+        raise
 
 def clean_text(text):
     if not text: return ""
