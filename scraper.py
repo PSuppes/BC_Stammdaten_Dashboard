@@ -52,48 +52,31 @@ def make_session():
 SESSION = make_session()
 
 def get_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--disable-software-rasterizer")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--no-first-run")
-    chrome_options.add_argument("--disable-crash-reporter")
-
     is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
     is_streamlit_cloud = os.name == "posix" and not is_github_actions
 
-    tmp_dir = None
+    chrome_options = Options()
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+
     if is_streamlit_cloud:
-        tmp_dir = tempfile.mkdtemp(prefix="chrome-", dir="/tmp")
+        chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-zygote")
         chrome_options.add_argument("--disable-setuid-sandbox")
-        chrome_options.add_argument("--ozone-platform=headless")
+        tmp_dir = tempfile.mkdtemp(prefix="chrome-", dir="/tmp")
         chrome_options.add_argument(f"--user-data-dir={tmp_dir}")
-
-    browser_path = (
-        next((p for p in ["/usr/bin/chromium", "/usr/bin/chromium-browser"] if os.path.exists(p)), None)
-        or shutil.which("chromium") or shutil.which("chromium-browser")
-    )
-    driver_path = (
-        next((p for p in ["/usr/bin/chromedriver", "/usr/lib/chromium/chromedriver"] if os.path.exists(p)), None)
-        or shutil.which("chromedriver")
-    )
-
-    try:
-        if browser_path and driver_path:
-            chrome_options.binary_location = browser_path
-            return webdriver.Chrome(service=Service(driver_path), options=chrome_options)
-        else:
-            from webdriver_manager.chrome import ChromeDriverManager
-            return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-    except Exception:
-        if tmp_dir:
+        chrome_options.binary_location = "/usr/bin/chromium"
+        try:
+            return webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=chrome_options)
+        except Exception:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-        raise
+            raise
+    else:
+        chrome_options.add_argument("--headless=new")
+        from webdriver_manager.chrome import ChromeDriverManager
+        return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
 def clean_text(text):
     if not text: return ""
