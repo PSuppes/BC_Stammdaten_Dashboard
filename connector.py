@@ -470,7 +470,7 @@ class BusinessCentralConnector:
                             img_url = scraped_data['Bild Datei URL']
                             if img_url:
                                 full_url = img_url if img_url.startswith("http") else f"https://flowzz.com{img_url}"
-                                r_img = requests.get(full_url, stream=True, timeout=10)
+                                r_img = requests.get(full_url, stream=True, timeout=10, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Referer": "https://flowzz.com/"})
                                 if r_img.status_code == 200:
                                     with open(temp_path, 'wb') as f:
                                         for chunk in r_img.iter_content(1024): f.write(chunk)
