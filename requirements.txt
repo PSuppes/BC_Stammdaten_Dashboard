@@ -6,4 +6,3 @@ requests
 Pillow
 selenium
 webdriver-manager
-undetected-chromedriver

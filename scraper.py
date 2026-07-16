@@ -51,31 +51,21 @@ def make_session():
 
 SESSION = make_session()
 
-def _get_chrome_major_version(binary):
-    try:
-        import subprocess
-        out = subprocess.run([binary, '--version'], capture_output=True, text=True, timeout=5).stdout
-        return int(out.strip().split()[-1].split('.')[0])
-    except Exception:
-        return None
-
-
 def get_driver():
-    import undetected_chromedriver as uc
-    options = uc.ChromeOptions()
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
 
     if os.path.exists("/usr/bin/chromium"):
-        # GitHub Actions / Linux
-        options.binary_location = "/usr/bin/chromium"
-        version = _get_chrome_major_version("/usr/bin/chromium")
-        return uc.Chrome(options=options, headless=True, use_subprocess=False, version_main=version)
+        chrome_options.binary_location = "/usr/bin/chromium"
+        return webdriver.Chrome(options=chrome_options)
     else:
-        # Lokal
-        return uc.Chrome(options=options, headless=True)
+        from webdriver_manager.chrome import ChromeDriverManager
+        service = Service(ChromeDriverManager().install())
+        return webdriver.Chrome(service=service, options=chrome_options)
 
 def clean_text(text):
     if not text: return ""
