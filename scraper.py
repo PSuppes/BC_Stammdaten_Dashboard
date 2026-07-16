@@ -16,6 +16,8 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 # Lokale Logik & BC Connector
@@ -50,26 +52,20 @@ def make_session():
 SESSION = make_session()
 
 def get_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new") 
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
+    import undetected_chromedriver as uc
+    options = uc.ChromeOptions()
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
 
-    # PRÜFUNG: Sind wir in der Cloud?
     if os.path.exists("/usr/bin/chromium"):
-        # CLOUD-MODUS: 
-        # Wir nutzen die Binaries, die Streamlit via packages.txt installiert hat.
-        chrome_options.binary_location = "/usr/bin/chromium"
-        # Wir lassen Service() leer, damit Selenium den Treiber im System-Pfad sucht.
-        return webdriver.Chrome(options=chrome_options)
+        # GitHub Actions / Linux
+        options.binary_location = "/usr/bin/chromium"
+        return uc.Chrome(options=options, headless=True, use_subprocess=False)
     else:
-        # LOKAL-MODUS (Dein PC):
-        # Hier darf der ChromeDriverManager weiterarbeiten.
-        from webdriver_manager.chrome import ChromeDriverManager
-        service = Service(ChromeDriverManager().install())
-        return webdriver.Chrome(service=service, options=chrome_options)
+        # Lokal
+        return uc.Chrome(options=options, headless=True)
 
 def clean_text(text):
     if not text: return ""
@@ -255,11 +251,18 @@ def scrape_full_details(driver, url):
 
 def hole_links_von_uebersicht(driver):
     print(f"🔎 JavaScript-Turbo-Scan wird gestartet...")
-    
-    # Kurz nach unten scrollen, um Lazy-Loading zu triggern
+
+    driver.set_script_timeout(120)
+
+    # Warten bis mindestens eine Produktkarte geladen ist
+    WebDriverWait(driver, 60).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "div.MuiCard-root a"))
+    )
+
+    # Ans Ende scrollen um Lazy-Loading zu triggern, dann warten bis Seite zur Ruhe kommt
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    time.sleep(10) 
-    
+    time.sleep(15)
+
     script = """
     return Array.from(
         document.querySelectorAll("div.MuiGrid2-grid-xs-6 div.MuiCard-root a")
@@ -268,10 +271,10 @@ def hole_links_von_uebersicht(driver):
     .filter(href => href);
     """
     found = driver.execute_script(script)
-    
+
     # Duplikate entfernen (wichtig, falls Karten doppelt verlinkt sind)
     found = list(dict.fromkeys(found))
-    
+
     print(f"✅ {len(found)} Links in Millisekunden extrahiert.")
     return found
 
