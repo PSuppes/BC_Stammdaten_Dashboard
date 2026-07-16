@@ -1,29 +1,23 @@
-name: Nightly Scraper
+name: Daily Scraper
 
 on:
   schedule:
-    # Läuft jeden Tag
-    - cron: '5 22 * * *'
+    # 9:05 Uhr deutscher Zeit (CET = UTC+1 → 8:05 UTC)
+    - cron: '5 8 * * *'
   workflow_dispatch: # Erlaubt manuelles Starten
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
 
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
       - name: Run Scraper
         env:
-          # Hier werden die Secrets aus GitHub geladen
           BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
           BC_CLIENT_SECRET: ${{ secrets.BC_CLIENT_SECRET }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -31,4 +25,4 @@ jobs:
           TENANT_ID: ${{ secrets.TENANT_ID }}
           ENVIRONMENT: ${{ secrets.ENVIRONMENT }}
           BC_COMPANY_ID: ${{ secrets.BC_COMPANY_ID }}
-        run: python scraper.py  # Dein Scraper-Einstiegspunkt
+        run: python scraper.py
