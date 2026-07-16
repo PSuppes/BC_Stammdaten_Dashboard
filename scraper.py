@@ -51,6 +51,15 @@ def make_session():
 
 SESSION = make_session()
 
+def _get_chrome_major_version(binary):
+    try:
+        import subprocess
+        out = subprocess.run([binary, '--version'], capture_output=True, text=True, timeout=5).stdout
+        return int(out.strip().split()[-1].split('.')[0])
+    except Exception:
+        return None
+
+
 def get_driver():
     import undetected_chromedriver as uc
     options = uc.ChromeOptions()
@@ -62,7 +71,8 @@ def get_driver():
     if os.path.exists("/usr/bin/chromium"):
         # GitHub Actions / Linux
         options.binary_location = "/usr/bin/chromium"
-        return uc.Chrome(options=options, headless=True, use_subprocess=False)
+        version = _get_chrome_major_version("/usr/bin/chromium")
+        return uc.Chrome(options=options, headless=True, use_subprocess=False, version_main=version)
     else:
         # Lokal
         return uc.Chrome(options=options, headless=True)
