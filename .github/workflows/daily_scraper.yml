@@ -25,4 +25,5 @@ jobs:
           TENANT_ID: ${{ secrets.TENANT_ID }}
           ENVIRONMENT: ${{ secrets.ENVIRONMENT }}
           BC_COMPANY_ID: ${{ secrets.BC_COMPANY_ID }}
+          PYTHONUTF8: "1"
         run: py scraper.py
