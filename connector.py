@@ -462,34 +462,60 @@ class BusinessCentralConnector:
                     final_img_path = bild_pfad
                     temp_path = "temp_upload.jpg"
                     
+                    storage_filename = None
+
                     if use_default_image:
                         print("      📸 Info: Nutze Default-Bild (Manuelle Auswahl im Dashboard)")
                         final_img_path = "Produkt_Bilder/default_flower.jpg"
-                    elif (not final_img_path or not os.path.exists(final_img_path)) and 'Bild Datei URL' in scraped_data:
-                        try:
-                            img_url = scraped_data['Bild Datei URL']
-                            if img_url:
+                    elif not final_img_path or not os.path.exists(final_img_path):
+                        # 1. Supabase Storage bevorzugen
+                        storage_url = scraped_data.get('Bild Storage URL')
+                        if storage_url:
+                            try:
+                                r_img = requests.get(storage_url, stream=True, timeout=10)
+                                if r_img.status_code == 200:
+                                    with open(temp_path, 'wb') as f:
+                                        for chunk in r_img.iter_content(1024): f.write(chunk)
+                                    final_img_path = temp_path
+                                    # Dateiname merken für späteres Löschen
+                                    storage_filename = storage_url.split("/")[-1]
+                            except Exception as img_err:
+                                print(f"   ⚠️ Storage-Download fehlgeschlagen: {img_err}")
+
+                        # 2. Fallback: flowzz CDN
+                        if (not final_img_path or not os.path.exists(final_img_path)) and scraped_data.get('Bild Datei URL'):
+                            try:
+                                img_url = scraped_data['Bild Datei URL']
                                 full_url = img_url if img_url.startswith("http") else f"https://flowzz.com{img_url}"
                                 r_img = requests.get(full_url, stream=True, timeout=10, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Referer": "https://flowzz.com/"})
                                 if r_img.status_code == 200:
                                     with open(temp_path, 'wb') as f:
                                         for chunk in r_img.iter_content(1024): f.write(chunk)
                                     final_img_path = temp_path
-                        except Exception as img_err:
-                            print(f"   ⚠️ Bild-Download fehlgeschlagen: {img_err}")
+                            except Exception as img_err:
+                                print(f"   ⚠️ Bild-Download fehlgeschlagen: {img_err}")
 
                     if final_img_path and os.path.exists(final_img_path):
                         try:
-                            # Wasserzeichen nur bei echten Scrapes entfernen
                             if not use_default_image and 'remove_watermark_rectangle' in globals():
                                 remove_watermark_rectangle(final_img_path)
-                            
                             if item_id:
-                                time.sleep(1) 
+                                time.sleep(1)
                                 self._upload_image(item_id, final_img_path)
+                                # Bild aus Supabase Storage löschen nach erfolgreichem BC-Upload
+                                if storage_filename:
+                                    try:
+                                        from supabase import create_client
+                                        _sb = create_client(
+                                            os.environ.get("SUPABASE_URL", ""),
+                                            os.environ.get("SUPABASE_KEY", "")
+                                        )
+                                        _sb.storage.from_("produkt-bilder").remove([storage_filename])
+                                    except Exception as del_err:
+                                        print(f"   ⚠️ Storage-Löschen fehlgeschlagen: {del_err}")
                         except Exception as upload_err:
                             print(f"   ⚠️ Bild-Upload Fehler: {upload_err}")
-                    
+
                     if final_img_path == temp_path and os.path.exists(temp_path):
                         try: os.remove(temp_path)
                         except: pass

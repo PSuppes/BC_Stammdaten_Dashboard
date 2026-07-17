@@ -115,22 +115,40 @@ def remove_watermark_rectangle(file_path):
 def sanitize_filename(name):
     return re.sub(r'[\\/*?:"<>|]', "", name).strip()
 
+def upload_to_storage(file_path, filename):
+    """Lädt ein Bild in Supabase Storage hoch und gibt die öffentliche URL zurück."""
+    try:
+        with open(file_path, 'rb') as f:
+            data = f.read()
+        supabase.storage.from_("produkt-bilder").upload(
+            filename, data, {"content-type": "image/jpeg", "x-upsert": "true"}
+        )
+        url = supabase.storage.from_("produkt-bilder").get_public_url(filename)
+        return url
+    except Exception as e:
+        print(f"   ⚠️ Storage-Upload fehlgeschlagen: {e}")
+    return None
+
+
 def download_image(url, product_name):
-    if not url: return None
+    if not url: return None, None
     if not os.path.exists(BILDER_ORDNER): os.makedirs(BILDER_ORDNER, exist_ok=True)
     filename = f"{sanitize_filename(product_name)}.jpg"
     file_path = os.path.join(BILDER_ORDNER, filename)
-    if os.path.exists(file_path): return file_path
-    try:
-        if url.startswith("/"): url = f"https://flowzz.com{url}"
-        response = SESSION.get(url, timeout=(10, 45), stream=True)
-        if response.status_code == 200:
-            with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(1024): f.write(chunk)
-            remove_watermark_rectangle(file_path) 
-            return file_path
-    except: pass
-    return None
+    if not os.path.exists(file_path):
+        try:
+            if url.startswith("/"): url = f"https://flowzz.com{url}"
+            response = SESSION.get(url, timeout=(10, 45), stream=True)
+            if response.status_code == 200:
+                with open(file_path, 'wb') as f:
+                    for chunk in response.iter_content(1024): f.write(chunk)
+                remove_watermark_rectangle(file_path)
+            else:
+                return None, None
+        except:
+            return None, None
+    storage_url = upload_to_storage(file_path, filename)
+    return file_path, storage_url
 
 # --- SCRAPER LOGIK FUNKTIONEN (ORIGINAL GITHUB) ---
 
@@ -235,7 +253,7 @@ def scrape_full_details(driver, url):
     daten['Produktgruppe'] = "Blüten"
     
     img_url = hole_bild_url(driver)
-    daten['Bild Datei'] = download_image(img_url, daten['Produktname'])
+    daten['Bild Datei'], daten['Bild Storage URL'] = download_image(img_url, daten['Produktname'])
     daten['Bild Datei URL'] = img_url 
     
     # Listen Scrapen
