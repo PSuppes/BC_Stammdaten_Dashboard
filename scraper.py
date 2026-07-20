@@ -113,7 +113,7 @@ def remove_watermark_rectangle(file_path):
         print(f"⚠️ Fehler bei Bildbearbeitung: {e}")
 
 def sanitize_filename(name):
-    return re.sub(r'[\\/*?:"<>|]', "", name).strip()
+    return re.sub(r"[\\/*?:\"<>|']", "", name).strip()
 
 def upload_to_storage(file_path, filename):
     """Lädt ein Bild in Supabase Storage hoch und gibt die öffentliche URL zurück."""
