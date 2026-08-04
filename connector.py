@@ -615,6 +615,65 @@ class BusinessCentralConnector:
                 return True
         return False                
 
+    def update_no_series(self, series_code="100.XXX", prefix="100."):
+        """Aktualisiert Last No. Used + Starting No. nach dem Import."""
+        max_val = 0
+        for item in self.existing_items_cache:
+            nr = item.get('number', '')
+            if nr.startswith(prefix):
+                try:
+                    val = int(nr.split(prefix)[1])
+                    if val > max_val:
+                        max_val = val
+                except Exception:
+                    pass
+
+        if max_val == 0:
+            return
+
+        last_no = f"{prefix}{max_val}"
+        next_no = f"{prefix}{max_val + 1}"
+
+        headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
+
+        get_url = (
+            f"{self.custom_api_root}/companies({self.company_id})"
+            f"/noSeriesLines?$filter=seriesCode eq '{series_code}'"
+        )
+        r = requests.get(get_url, headers=headers, timeout=15)
+        if r.status_code != 200 or not r.json().get("value"):
+            print(f"   ⚠️ No. Series '{series_code}' nicht gefunden.")
+            return
+
+        record = r.json()["value"][0]
+        etag    = record.get("@odata.etag", "*")
+        line_no = record.get("lineNo", 10000)
+        current_last = record.get("lastNoUsed", "")
+
+        try:
+            current_val = int(current_last.split(prefix)[1]) if current_last else 0
+        except Exception:
+            current_val = 0
+
+        if max_val <= current_val:
+            print(f"   No. Series bereits aktuell ({current_last}).")
+            return
+
+        patch_url = (
+            f"{self.custom_api_root}/companies({self.company_id})"
+            f"/noSeriesLines(seriesCode='{series_code}',lineNo={line_no})"
+        )
+        rp = requests.patch(
+            patch_url,
+            headers={**headers, "If-Match": etag},
+            json={"lastNoUsed": last_no, "startingNo": next_no},
+            timeout=15,
+        )
+        if rp.status_code in [200, 204]:
+            print(f"   No. Series aktualisiert: Last={last_no}, Starting={next_no}")
+        else:
+            print(f"   ⚠️ No. Series Update fehlgeschlagen ({rp.status_code}): {rp.text[:200]}")
+
     def link_to_partner_sync(self, item_no):
         url = f"{self.custom_api_root}/companies({self.company_id})/itemSyncs"
         headers = {

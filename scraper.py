@@ -409,7 +409,10 @@ def run_nightly_scraper():
         print(f"❌ Fehler im Haupt-Loop: {e}")
     finally:
         driver.quit()
-        print("😴 Scraper beendet.")
+
+    print("🔄 Aktualisiere No. Series...")
+    bc.update_no_series()
+    print("😴 Scraper beendet.")
 
 if __name__ == "__main__":
     run_nightly_scraper()
