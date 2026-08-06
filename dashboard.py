@@ -243,6 +243,7 @@ else:
                 p.progress((i + 1) / len(selected_indices))
             
             status_text.success("🏁 Alle ausgewählten Importe abgeschlossen!")
+            bc.update_no_series()
             time.sleep(2)
             st.rerun()
 
